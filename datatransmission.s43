@@ -1,0 +1,94 @@
+;*******************************************************************************
+;
+; Module Name: Transmit data on USCI_A0 at 9600 8N1  
+; By: Jon Braverman
+; Date: 2/9/2013
+; Assignment: #4
+;
+;*******************************************************************************
+#include  "msp430g2553.h"
+;-------------------------------------------------------------------------------
+                                            ; Program Defines
+;-------------------------------------------------------------------------------
+_byte       EQU 1                               ; Size of a byte is one RAM unit
+_word       EQU 2                               ; Size of a word is two RAM units
+
+;-------------------------------------------------------------------------------
+            ORG     0200h                   ; Global Variable (RAM) Definitions
+;-------------------------------------------------------------------------------          
+
+nextT 	DS 	_byte 				;location of next byte to be transmitted
+
+;-------------------------------------------------------------------------------
+            ORG     0C000h                  ; Program Reset
+;-------------------------------------------------------------------------------
+RESET       mov.w   #0280h,SP               ; Initialize stackpointer
+            mov.b   &CALBC1_1MHZ, &BCSCTL1  ; Load calibrated DCO 1MHZ pt 1/2
+            mov.b   &CALDCO_1MHZ, &DCOCTL   ; Load calibrated DCO 1MHZ pt 2/2
+StopWDT     mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; Disable watchdog timer
+
+SetupP1  
+            bis.b   #BIT3, &P1REN           ; Enable pullup resistors for button
+            bis.b   #BIT0, &P1DIR           ; Set P1.0 as output
+            bis.b   #BIT1 + BIT2, &P1SEL    ; P1.1 = RXD, P1.2=TXD
+            bis.b   #BIT1 + BIT2, &P1SEL2   ; P1.1 = RXD, P1.2=TXD
+SetupUSCI_A0
+            bis.b   #UCSSEL_2, &UCA0CTL1    ; SMCLK as input clock
+            mov.b   #104, &UCA0BR0          ; Config baud rate divider 1MHz 9600
+            mov.b   #0, &UCA0BR1            ; 1MHz 9600
+            mov.b   #UCBRS0, &UCA0MCTL      ; Modulation UCBRSx = 1
+            bic.b   #UCSWRST, &UCA0CTL1     ; **Initialize USCI state machine**
+            bis.b   #UCA0RXIE, &IE2         ; Enable USCI_A0 RX interrupt
+
+
+            bis.w   #GIE,SR                 ; Enable global interrupts
+init_variables   
+         
+
+
+
+
+
+init_light
+	mov.b #001h,&P1OUT
+
+main        
+            nop            
+            bit.b   #BIT3, &P1IN
+            jc      done
+            bit.b   #UCA0TXIFG, &IFG2
+            jnc     txfull
+            mov.b   #'0', &UCA0TXBUF ; initial 0 sent
+
+txfull         
+            
+done:
+            jmp     main        
+            
+
+;-------------------------------------------------------------------------------
+USCI_RX_ISR;      
+;-------------------------------------------------------------------------------                                            
+          
+	;take move input from buffer to spot indicated by 
+
+          reti                                            
+          
+
+;-------------------------------------------------------------------------------
+USCI_TX_ISR;      
+;-------------------------------------------------------------------------------                                            
+          
+
+
+          reti                                                      
+;-------------------------------------------------------------------------------
+;           Interrupt Vectors
+;-------------------------------------------------------------------------------
+            ORG     0FFFEh                  ; MSP430 RESET Vector
+            DW      RESET                   ;
+            ORG     0FFEEh                  ; USCI RX Vector
+            DW      USCI_RX_ISR                      
+            ORG     0FFECh                  ; USCI TX Vector
+            DW      USCI_TX_ISR                      
+            END

@@ -1,0 +1,171 @@
+;*******************************************************************************
+;
+; Module Name: 10ms Timebase   
+; By: Steve Marshall
+; Date: 2/24/15
+; Assignment: N/A
+;
+;*******************************************************************************
+#include  "msp430g2553.h"
+_byte EQU 1
+_word EQU 2
+
+state DS _byte
+;-------------------------------------------------------------------------------
+            ORG     0C000h                  ; Program Reset
+;-------------------------------------------------------------------------------
+        NAME    main                    ; module name
+
+        PUBLIC  main                    ; make the main label vissible
+                                        ; outside this module
+
+
+init:       
+RESET       mov.w   #0280h,SP               ; Initialize stackpointer
+            mov.b   &CALBC1_1MHZ, &BCSCTL1  ; Load cawlibrated DCO 1MHZ pt 1/2
+            mov.b   &CALDCO_1MHZ, &DCOCTL   ; Load calibrated DCO 1MHZ pt 2/2
+StopWDT     mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; 
+
+SetupC0     mov.w   #CCIE,&CCTL0            ; 
+            mov.w   #100,&CCR0            ;
+SetupTA     mov.w   #TASSEL_2+MC_1,&TACTL   ; 
+            bis.w   #GIE,SR                 ; 
+            mov     #0,  R5
+            BIS.B   #001h, &P1DIR           ; P1.0 output
+            BIS.B   #BIT3,&P1REN    
+            mov.w   #000h, R4
+            mov.w   #001h, R5    
+            mov.w   #001h, R6
+            mov.w   #008d, R7
+            mov.w   #0200h, R8                ;initialize pointer to multi-word variable
+            mov.b     #00h, R12
+
+
+ 
+main
+
+        mov.w  #bad, R6
+        mov.b  @R6+, R11   
+
+Statemachine
+
+
+mov.b     R12, R4  ; Obtain a copy of b_state for local destructive use in determining state
+
+
+switch_states:                                  ; Determine state {0,1,2,3,defaultstate}
+           sub.b      #00h, R4
+           jeq	      state0
+           sub.b      #01h, R4
+           jeq        state1	
+           sub.b      #01h, R4
+           jeq        state2
+           sub.b      #01h, R4
+           jeq	      state3
+	   sub.b      #01h, R4
+           jeq	      state4
+	   sub.b      #01h, R4
+           jeq	      state5
+           jmp 	      defaultstate
+          
+state0:
+
+     	   cmp.w #0h,R10		        ; If 
+           JEQ        switchend                  ;  		, do not leave state 
+
+	   cmp.b #'s', R11
+	   JNE defaultstate
+
+
+           add.b     #01h, R12     	; Else if 	, proceed to next state (next time through State Machine)
+           jmp       switchend
+          
+state1:
+
+	   cmp.w #0h,R10		        ; If 
+           JEQ        switchend                  ;  		, do not leave state 
+
+	   cmp.b #'t', R11
+	   JNE defaultstate
+
+           add.b     #01h, R12      	; Else if 	, proceed to next state (next time through State Machine)
+           jmp       switchend
+
+state2:
+
+           
+     	   cmp.w #0h,R10		        ; If 
+           JEQ        switchend                  ;  		, do not leave state 
+
+	   cmp.b #'e', R11
+	   JNE defaultstate                ;  		, do not leave state 
+
+           add.b     #01h, R12    	; Else if 	, proceed to next state (next time through State Machine)
+           jmp       switchend
+          
+state3:
+
+           
+     	   cmp.w #0h,R10		        ; If 
+           JEQ        switchend                  ;  		, do not leave state 
+
+		   cmp.b #'v', R11
+		   JNE defaultstate                ;  		, do not leave state 
+
+           add.b     #01h, R12    	; Else if 	, proceed to next state (next time through State Machine)
+           jmp       switchend
+state4:
+
+           
+     	   cmp.w #0h,R10		        ; If 
+           JEQ        switchend                  ;  		, do not leave state 
+
+		   cmp.b #'e', R11
+		   JNE defaultstate                ;  		, do not leave state 
+
+           add.b     #01h, R12    	; Else if 	, proceed to next state (next time through State Machine)
+           jmp       switchend
+state5:
+
+           
+     	   cmp.w #0h,R10		        ; If 
+           JEQ        switchend                  ;  		, do not leave state 
+
+	   cmp.b #0x00, R11
+           JNE defaultstate                ;  		, do not leave state 
+           
+           MOV.b  #001h, &P1OUT
+
+           add.b     #01h, R12    	; Else if 	, proceed to next state (next time through State Machine)
+           jmp       switchend
+
+defaultstate:
+	   mov.b     #000h, &P1OUT
+           mov.b     #00h, R12
+switchend:
+
+            mov.b &P1IN, R4
+            XOR.w #8h,R4
+            cmp.w #0h,R4        ;Test if same
+            JEQ  RESET
+            
+            JMP main
+
+
+        
+            
+
+
+
+
+bad     DB      "steve"    
+       
+                                            ;
+;-------------------------------------------------------------------------------
+;           Interrupt Vectors
+;-------------------------------------------------------------------------------
+            ORG     0FFFEh                  ; MSP430 RESET Vector
+            DW      RESET                   ;
+			
+
+END
