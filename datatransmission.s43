@@ -1,9 +1,9 @@
 ;*******************************************************************************
 ;
 ; Module Name: Transmit data on USCI_A0 at 9600 8N1  
-; By: Jon Braverman
-; Date: 2/9/2013
-; Assignment: #4
+; By: Steve Marshall
+; Date: 4/9/15
+; Assignment: UART Usage
 ;
 ;*******************************************************************************
 #include  "msp430g2553.h"
@@ -58,11 +58,26 @@ main
             jc      done
             bit.b   #UCA0TXIFG, &IFG2
             jnc     txfull
-            mov.b   #'0', &UCA0TXBUF ; initial 0 sent
+            mov.b   #'0', &UCA0TXBUF ; initial 0 sent -move byte into buffer and send byte
+
+	;check if recieved
+	;continue if recieved
+	;check buffer to R4
+	;if = R4 continue else go to reset
+	;cmp R4 to 255
+	;if R4 = 255 skip to done
+	;incrament R4
+	;load R4 into transmit
+	;start transmit
+	;reset recieve
+
 
 txfull         
             
 done:
+	;turn off LED
+	;stop program
+
             jmp     main        
             
 
@@ -70,7 +85,8 @@ done:
 USCI_RX_ISR;      
 ;-------------------------------------------------------------------------------                                            
           
-	;take move input from buffer to spot indicated by 
+;V2
+;if recieved byte add one to byte and move into send buffer
 
           reti                                            
           
