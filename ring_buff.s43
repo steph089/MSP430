@@ -1,0 +1,121 @@
+NAME    RING_BUFF                    ; module name
+
+
+
+PUBLIC  ringbuffer_flush                    ; make the label visible outside this file
+PUBLIC  ringbuffer_isempty                    ; make the label visible outside this file
+PUBLIC  ringbuffer_isfull                    ; make the label visible outside this file
+PUBLIC  ringbuffer_dequeue                    ; make the label visible outside this file
+PUBLIC  ringbuffer_enqueue                    ; make the label visible outside this file
+
+; Ring Buffer Structure
+; Head (1 byte)
+; Tail (1 byte)
+; array (32 bytes)
+
+
+RSEG    CODE                    ; place program in 'CODE' segment   
+   
+;;;;;;;;;;;;;;;   
+ringbuffer_flush:   
+   MOV.B   #0x0, R14
+   MOV.B   R14, 0x1(R12)
+   MOV.B   R14, 0(R12)
+   RET
+   
+   
+;;;;;;;;;;;;;;;  
+ringbuffer_isempty:
+  CMP.B   0x1(R12), 0(R12)
+  JNE     ??ringbuffer_isempty_0
+  MOV.B   #0x1, R12
+  RET
+  
+  
+??ringbuffer_isempty_0:
+  MOV.B   #0x0, R12
+  RET
+  
+
+;;;;;;;;;;;;;;;;
+ringbuffer_isfull:
+  MOV.B   @R12, R14
+  MOV.B   0x1(R12), R15
+  CMP.B   #0x1f, R15
+  JNE     ??ringbuffer_isfull_0
+
+  CMP.B   #0x0, R14
+  JNE     ??ringbuffer_isfull_1
+  MOV.B   #0x1, R12
+  RET
+
+??ringbuffer_isfull_0:
+  MOV.B   R15, R15
+  ADD.W   #0x1, R15
+  MOV.B   R14, R14
+  CMP.W   R14, R15
+  JNE     ??ringbuffer_isfull_1
+  MOV.B   #0x1, R12
+  RET
+
+??ringbuffer_isfull_1:
+  MOV.B   #0x0, R12
+  RET  
+  
+
+;;;;;;;;;;;;;;;;;;
+; IN  R12 = Address of start of ring buffer structure
+; OUT R12 = Value 
+; -- Must call ringbuffer_isempty before calling this function
+ringbuffer_dequeue:
+  push    R14
+  push    R15
+  MOV.B   @R12, R15             ; Load head data into R15
+  MOV.B   R15, R15              ;                                        Example at 200h, with head = 1 
+  MOV.W   R12, R14              ; load head addres into R14         :    200h
+  ADD.W   R15, R14              ; add head data to R14              :    201h
+  MOV.B   0x2(R14), R14         ; copy data at start of array      ;    203h = array[1] (202h = array[0])
+  ADD.B   #0x1, 0(R12)          ; increment head
+
+  CMP.B   #0x20, 0(R12)         ; test to see if head is outside bounds of array
+  JNC     ??ringbuffer_dequeue_0
+                                ; if it is outside of bounds of array
+  MOV.B   #0x0, 0(R12)          ; "wrap" to 0
+??ringbuffer_dequeue_0: 
+  MOV.B   R14, R12              ; copy data to output register R12
+  
+  pop     R15
+  pop     R14
+  RET
+;;;;;;;;;;;;;  
+; IN  R12 = Address of start of ring buffer structure
+;     R13 = Data to put in queue
+; OUT R12 = Success = 1, Failure = 0
+ringbuffer_enqueue:
+  PUSH.W  R10
+  MOV.W   R12, R10
+  MOV.W   R10, R12
+  CALL    #ringbuffer_isfull
+  CMP.B   #0x0, R12
+  JNE     ??ringbuffer_enqueue_1
+  MOV.B   0x1(R10), R15
+  MOV.B   R15, R15
+  MOV.W   R10, R14
+  ADD.W   R15, R14
+  MOV.B   R13, 0x2(R14)
+  ADD.B   #0x1, 0x1(R10)
+  CMP.B   #0x20, 0x1(R10)
+  JNC     ??ringbuffer_enqueue_2
+  MOV.B   #0x0, 0x1(R10)
+??ringbuffer_enqueue_2:
+  MOV.B   #0x1, R12
+??ringbuffer_enqueue_0:
+  POP.W   R10
+  RET
+??ringbuffer_enqueue_1:
+  MOV.B   #0x0, R12
+  JMP     ??ringbuffer_enqueue_0  
+  
+  
+  
+  END

@@ -1,110 +1,165 @@
-;*******************************************************************************
+;******************************************************************************* 
+; 
+; Module Name: Transmit data on USCI_A0 at 9600 8N1   
+; By: Steve Marshall 
+; Date: 4/9/15 
+; Assignment: Serial Communication
+ ; 
+ ;******************************************************************************* 
+
+
+;Read ring buffer/cingular buffer assigned readings (1,2).
 ;
-; Module Name: Transmit data on USCI_A0 at 9600 8N1  
-; By: Steve Marshall
-; Date: 4/9/15
-; Assignment: UART Usage
-;
-;*******************************************************************************
-#include  "msp430g2553.h"
-;-------------------------------------------------------------------------------
-                                            ; Program Defines
-;-------------------------------------------------------------------------------
-_byte       EQU 1                               ; Size of a byte is one RAM unit
-_word       EQU 2                               ; Size of a word is two RAM units
-
-;-------------------------------------------------------------------------------
-            ORG     0200h                   ; Global Variable (RAM) Definitions
-;-------------------------------------------------------------------------------          
-
-nextT 	DS 	_byte 				;location of next byte to be transmitted
-
-;-------------------------------------------------------------------------------
-            ORG     0C000h                  ; Program Reset
-;-------------------------------------------------------------------------------
-RESET       mov.w   #0280h,SP               ; Initialize stackpointer
-            mov.b   &CALBC1_1MHZ, &BCSCTL1  ; Load calibrated DCO 1MHZ pt 1/2
-            mov.b   &CALDCO_1MHZ, &DCOCTL   ; Load calibrated DCO 1MHZ pt 2/2
-StopWDT     mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; Disable watchdog timer
-
-SetupP1  
-            bis.b   #BIT3, &P1REN           ; Enable pullup resistors for button
-            bis.b   #BIT0, &P1DIR           ; Set P1.0 as output
-            bis.b   #BIT1 + BIT2, &P1SEL    ; P1.1 = RXD, P1.2=TXD
-            bis.b   #BIT1 + BIT2, &P1SEL2   ; P1.1 = RXD, P1.2=TXD
-SetupUSCI_A0
-            bis.b   #UCSSEL_2, &UCA0CTL1    ; SMCLK as input clock
-            mov.b   #104, &UCA0BR0          ; Config baud rate divider 1MHz 9600
-            mov.b   #0, &UCA0BR1            ; 1MHz 9600
-            mov.b   #UCBRS0, &UCA0MCTL      ; Modulation UCBRSx = 1
-            bic.b   #UCSWRST, &UCA0CTL1     ; **Initialize USCI state machine**
-            bis.b   #UCA0RXIE, &IE2         ; Enable USCI_A0 RX interrupt
-
-
-            bis.w   #GIE,SR                 ; Enable global interrupts
-init_variables   
-         
+;Use the attached project as base project to create a simple serial communication device.
+;c
+;The system shall transmit a message (10 bytes) every second.  See protocol below.
+;The system shall be capable of receiving a message (10 bytes) at a rate no more often than every second.  In other words, you will have ~1 second to process the last message.
+;The system shall be capable of being aware that a new message has been received and that it is valid based on the protocol.
+;The system shall be capable of changing the message based on various real time details. In other words, the message is not hard coded.
+;The system shall use ring buffers and interrupts for both the receipt and transmission of the data.
+;Protocol
+;Byte 0	Byte 1	Byte 2	Byte 3	Byte 4	Byte 5	Byte 6	Byte 7	Byte 8	Byte 9
+;0xE3	Msg #
+;increments
+;every
+;transmission	Destination
+;Address	Source 
+;Address	Data 0	Data 1	Data 2	Data 3	Arithmetic Sum
+;of Bytes 1 thru 7	0x3E
+;Data 0:3 are to be determined by you.
+;Reference reading assignments:
+;http://www.ganssle.com/articles/auarts.htm
 
 
 
+ #include  "msp430g2553.h" 
+;------------------------------------------------------------------------------- 
+                                            ; Program Defines 
+ ;------------------------------------------------------------------------------- 
+_byte       EQU 1                               ; Size of a byte is one RAM unit 
+_word       EQU 2                               ; Size of a word is two RAM units 
 
+ 
+;------------------------------------------------------------------------------- 
+             ORG     0200h                   ; Global Variable (RAM) Definitions 
+;-------------------------------------------------------------------------------           
 
-init_light
-	mov.b #001h,&P1OUT
+ 
+nextT 	DS 	_byte 				;location of next byte to be transmitted 
 
-main        
-            nop            
-            bit.b   #BIT3, &P1IN
-            jc      done
-            bit.b   #UCA0TXIFG, &IFG2
-            jnc     txfull
-            mov.b   #'0', &UCA0TXBUF ; initial 0 sent -move byte into buffer and send byte
-
-	;check if recieved
-	;continue if recieved
-	;check buffer to R4
-	;if = R4 continue else go to reset
-	;cmp R4 to 255
-	;if R4 = 255 skip to done
-	;incrament R4
-	;load R4 into transmit
-	;start transmit
-	;reset recieve
-
-
-txfull         
+ 
+;------------------------------------------------------------------------------- 
+             ORG     0C000h                  ; Program Reset 
+;------------------------------------------------------------------------------- 
+RESET       mov.w   #0280h,SP               ; Initialize stackpointer 
+             mov.b   &CALBC1_1MHZ, &BCSCTL1  ; Load calibrated DCO 1MHZ pt 1/2 
+             mov.b   &CALDCO_1MHZ, &DCOCTL   ; Load calibrated DCO 1MHZ pt 2/2 
+StopWDT     mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; Disable watchdog timer 
+ 
+ 
+SetupP1   
+            bis.b   #BIT3, &P1REN           ; Enable pullup resistors for button 
+             bis.b   #BIT0, &P1DIR           ; Set P1.0 as output 
+             bis.b   #BIT1 + BIT2, &P1SEL    ; P1.1 = RXD, P1.2=TXD 
+             bis.b   #BIT1 + BIT2, &P1SEL2   ; P1.1 = RXD, P1.2=TXD 
+SetupUSCI_A0 
+             bis.b   #UCSSEL_2, &UCA0CTL1    ; SMCLK as input clock 
+             mov.b   #104, &UCA0BR0          ; Config baud rate divider 1MHz 9600 
+             mov.b   #0, &UCA0BR1            ; 1MHz 9600 
+             mov.b   #UCBRS0, &UCA0MCTL      ; Modulation UCBRSx = 1 
+             bic.b   #UCSWRST, &UCA0CTL1     ; **Initialize USCI state machine** 
+             bis.b   #UCA0RXIE, &IE2         ; Enable USCI_A0 RX interrupt 
+ 
+ 
+ 
+ 
+             bis.w   #GIE,SR                 ; Enable global interrupts 
+init_variables    
+           mov.w #1,R4
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+init_light 
+ 	mov.b #001h,&P1OUT 
+         nop             
+             bit.b   #BIT3, &P1IN 
+             jc      done 
+             bit.b   #UCA0TXIFG, &IFG2 
+             jnc     txfull 
+             mov.b   #1, &UCA0TXBUF ; initial 0 sent -move byte into buffer and send byte 
+ 
+main         
             
-done:
-	;turn off LED
-	;stop program
-
-            jmp     main        
+ 
+ ;V1
+ ;{          
+           ; nop
+            ;bit.b   #UCA0RXIFG, &IFG2 
+            ;jc     main	;continue if recieved 
+ ;}
+ 
+  ;The UCA0RXBUF is a location/buffer in memory reserved for the recived data of the UART protocol 
+            cmp.b   &UCA0RXBUF,R4	;check buffer to R4 
+            JNE RESET;if buffer = R4 continue else go to reset 
+            Cmp.b #255,R4;cmp R4 to 255 
+            JEQ done ;if R4 = 255 skip to done 
+            inc.b R4;increment R4 
+            mov.b R4,&UCA0TXBUF;load R4 into transmit 
+            jmp main
+ 
+ 
+ 
+ 
+txfull          
+              
+done: 
+mov.b #000h,&P1OUT 	;turn off LED 
+ 	
+jmp    done       ;stop program in a loop
+              
+ 
+ 
+ ;------------------------------------------------------------------------------- 
+USCI_RX_ISR;       
+ ;-------------------------------------------------------------------------------                                             
             
+ ;V2 
+ ;{
 
-;-------------------------------------------------------------------------------
-USCI_RX_ISR;      
-;-------------------------------------------------------------------------------                                            
-          
-;V2
-;if recieved byte add one to byte and move into send buffer
+ mov.b &UCA0RXBUF,R5;if recieved byte add one to byte
+ inc.b R5
+ mov.b R5,&UCA0TXBUF             ;move into send buffer 
+;}
+ 
+           reti                                             
+            
+ 
+ 
+ ;------------------------------------------------------------------------------- 
+USCI_TX_ISR;       
+ ;-------------------------------------------------------------------------------                                             
+            ;Incement which byte we are on
+			;referance a place in memory 
 
-          reti                                            
-          
-
-;-------------------------------------------------------------------------------
-USCI_TX_ISR;      
-;-------------------------------------------------------------------------------                                            
-          
-
-
-          reti                                                      
-;-------------------------------------------------------------------------------
-;           Interrupt Vectors
-;-------------------------------------------------------------------------------
-            ORG     0FFFEh                  ; MSP430 RESET Vector
-            DW      RESET                   ;
-            ORG     0FFEEh                  ; USCI RX Vector
-            DW      USCI_RX_ISR                      
-            ORG     0FFECh                  ; USCI TX Vector
-            DW      USCI_TX_ISR                      
-            END
+ 
+ 
+ 
+ 
+           reti                                                       
+ ;------------------------------------------------------------------------------- 
+ ;           Interrupt Vectors 
+ ;------------------------------------------------------------------------------- 
+             ORG     0FFFEh                  ; MSP430 RESET Vector 
+             DW      RESET                   ; 
+             ORG     0FFEEh                  ; USCI RX Vector 
+             DW      USCI_RX_ISR                       
+             ORG     0FFECh                  ; USCI TX Vector 
+             DW      USCI_TX_ISR                       
+             END 
