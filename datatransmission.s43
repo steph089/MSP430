@@ -8,28 +8,7 @@
  ;******************************************************************************* 
 
 
-;Read ring buffer/cingular buffer assigned readings (1,2).
-;
-;Use the attached project as base project to create a simple serial communication device.
-;c
-;The system shall transmit a message (10 bytes) every second.  See protocol below.
-;The system shall be capable of receiving a message (10 bytes) at a rate no more often than every second.  In other words, you will have ~1 second to process the last message.
-;The system shall be capable of being aware that a new message has been received and that it is valid based on the protocol.
-;The system shall be capable of changing the message based on various real time details. In other words, the message is not hard coded.
-;The system shall use ring buffers and interrupts for both the receipt and transmission of the data.
-;Protocol
-;Byte 0	Byte 1	Byte 2	Byte 3	Byte 4	Byte 5	Byte 6	Byte 7	Byte 8	Byte 9
-;0xE3	Msg #
-;increments
-;every
-;transmission	Destination
-;Address	Source 
-;Address	Data 0	Data 1	Data 2	Data 3	Arithmetic Sum
-;of Bytes 1 thru 7	0x3E
-;Data 0:3 are to be determined by you.
-;Reference reading assignments:
-;http://www.ganssle.com/articles/auarts.htm
-
+;This implements a basic UART send and recieve of bits
 
 
  #include  "msp430g2553.h" 
