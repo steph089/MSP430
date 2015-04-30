@@ -13,17 +13,16 @@
         tx_rb:  DS8 34  // Head, Tail, 32bytes of buffer
         space:  DS8 14
         rx_rb:  DS8 34  // Head, Tail, 32bytes of buffer
-        my_address: DS 1
+        
         txmessage: DS8 10
         rxmessage: DS8 10 
-        RXPTR: DS 1
-        arithmeticsum: DS 1
-        msgnum: DS 1
-        destinationadd: DS 1
         recieved_data: DS8 4
         send_data: DS8 4
-        bad_recieve: DS 1
-		recieve_read: DS 1
+        destinationadd: DS8 1
+        arithmeticsum: DS8 1
+        msgnum: DS8 1
+        bad_recieve: DS8 1
+        my_address: DS8 1
         
         
         ORG     0FFFEh
@@ -69,140 +68,148 @@ SetupUSCI_A0
         bis.w   #GIE,SR                 ; Enable global interrupts
         
         ;initialize variables here
-		mov.w 	#0, armtxmessage
-        mov.w 	#0, rxmessage
+                mov.w 	#0, rxmessage
 		mov.w	#0,	arithmeticsum
 		mov.w	#0,	msgnum
 		mov.w	#0,	destinationadd
-		mov.w	#1, recieve_read
+                mov.w   #0,     R7
 		
+varinit:
+               
 		;Default Data for test
 		mov.w   #0,R15
-		mov.w	#192,send_data(R15)
+                mov.b   #114, rxmessage(R15)
+		mov.b	#83,  send_data(R15)
+                mov.b   #116, txmessage(R15)
+                mov.b	#35,  recieved_data(R15)
 		inc.w   R15
-		mov.w	#168,send_data(R15)
+                mov.b   #120, rxmessage(R15)
+		mov.b	#84,  send_data(R15)
+                mov.b   #120, txmessage(R15)
+                mov.b	#35,  recieved_data(R15)
 		inc.w   R15
-		mov.w	#0,	send_data(R15)
+                mov.b   #109, rxmessage(R15)
+		mov.b	#69,	send_data(R15)
+                mov.b   #109, txmessage(R15)
+                mov.b	#35,  recieved_data(R15)
 		inc.w   R15
-		mov.w	#1,	send_data(R15)
+                mov.b   #101, rxmessage(R15)
+		mov.b	#86,	send_data(R15)
+                mov.b   #101, txmessage(R15)
+                mov.b	#35,  recieved_data(R15)
 		
-		call protocol_send
 		
 
 		
 		
 main:   
+                call #protocol_send
 		NOP                              ; main program
-		
-		call protocol_recieve
-		cmp.b #192 recieve
+		call #protocol_recieve
+                mov.b #0, R4
+		cmp.b #83, recieved_data(R4)
 		JEQ continue
-		JMP Main
+		JMP varinit
 
 			 
 protocol_send: 
-		push R13 ;output data bit for ringbuff
-        push R12 ;location of 
-		push R10 ;Message pointer
-		push R9  ;checksum
-		
-		
-        ;call    #ringbuffer_flush ;this is probably not a good idea, should check if empty first
+        XOR.B  #BIT0, &P1OUT
+        push R12
+	push R13
+	push R9
+        push R11
+        mov.w #tx_rb, R12
         mov.w  	#0,R9
-		mov.w   #0,R13
+		mov.w   #0,R11
 		
-        mov.b   #E3h,rxmessage(R13) ;0 byte
-		add.b   rxmessage(R13),R9
-		add.b	#1, R13
+        mov.b   #0E3h , txmessage(R11) ;0 byte
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
 		
-		mov.b   #msgnum, rxmessage(R13) ;1 byte
-		add.b   rxmessage(R13),R9
-		add.b	#1, R13
+	mov.b   &msgnum, txmessage(R11) ;1 byte
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
 		
-		mov.b   #destinationadd, rxmessage(R13) ;2 byte
-		add.b   rxmessage(R13),R9
-		add.b	#1, R13
+	mov.b   &destinationadd, txmessage(R11) ;2 byte
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
 		
-		mov.b 	#0,R10	
-		mov.b   send_data(R10), rxmessage(R13) ;4 byte
-		add.b   rxmessage(R13),R9
-		add.b	#1, R13
+	mov.b	#0,R10
+        mov.b   send_data(R10), txmessage(R11) ;4 byte
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
 		
-		inc.b	R10
-        mov.b   send_data(R10), rxmessage(R13) ;5 byte  Correct
-		add.b   rxmessage(R13),R9
-		add.b	#1, R13
+	inc.b	R10
+        mov.b   send_data(R10), txmessage(R11) ;5 byte  Correct
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
 		
-		inc.b	R10
-		mov.b   send_data(R10), rxmessage(R13) ;6 byte
-		add.b   rxmessage(R13),R9
-		add.b	#1, R13
+	inc.b	R10
+	mov.b   send_data(R10), txmessage(R11) ;6 byte
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
 		
-		inc.b	R10
-        mov.b   send_data(R10), rxmessage(R13) ;7 byte
-		add.b   rxmessage(R13),R9
-		add.b	#1, R13
+	inc.b	R10
+        mov.b   send_data(R10), txmessage(R11) ;7 byte
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
 		
 		;checksum in R9
-        mov.b   #arithmeticsum, rxmessage(R13) ;8 byte
-		add.b	#1, R13
+        mov.b   R9, txmessage(R11) ;8 byte
+	add.b	#1, R11
 		
-		mov.b   #3Eh, rxmessage(R13) ;9 byte
-		
-        mov.w   #0,R10
-		mov.w   #0,R13
+	mov.b   #3Eh, txmessage(R11) ;9 byte
+	add.b	#1, R11
+	mov.w   #0,R11
 enq:
         
-		mov.w   #rx_rb, R12               ; MOV the address of the ring buffer into R12
+	add.b   txmessage(R11),R9
+		
+        mov.w   #tx_rb, R12               ; MOV the address of the ring buffer into R12
+        mov.b   txmessage(R11), R13
         call    #ringbuffer_enqueue
-		mov.b   rxmessage(R10),R13
-		add.b	#1, R10
+	add.b	#1, R11
           
-        cmp.w   #10,R10   ;10th byte is more than needed 9th max
+        cmp.w   #10,R11   ;10th byte is more than needed 9th max
         JEQ     enq_done
         JMP 	enq       
 		
 enq_done:
-		add.b #1,msgnum
-		pop R9		
-		pop R10 
-		pop R12
-		pop R13
-		
-        JMP Main
+        pop R11
+        pop R9
+	pop R13
+	bis.b   #UCA0TXIE, &IE2         ; Enable USCI_A0 TX interrupt to begin sending data in tx_rb
+        pop R12
+        ret
 
-
-		
 protocol_recieve:
-		;check if data has been handled so we can wait before reading new info into the variables
-		cmp.b 	#0,recieve_read
-		JEQ 	skipdeq
-		
-		push    R12
-        push R15
+        XOR.B  #BIT0, &P1OUT
+        push    R12
+        push    R15
+        push    R9
         mov.w   #rx_rb, R12               ; MOV the address of the ring buffer into R12
         call    #ringbuffer_isempty
-        cmp.b   #0x00, R12
-        JEQ    deq                     ; if the ring buffer is not empty, jump to deq and recieve the data
+        mov.b   #0, R15
+        cmp.b   #0x01, R12
+        JNE     deqp                     ; if the ring buffer is not empty, jump to deq and send the data
         ;do nothing
-
+        jmp     skipdeqp
           
-deq:
-          
-        mov.w   #tx_rb, R12               ; MOV the address of the ring buffer into R12
+deqp:
+        mov.w   #rx_rb, R12               ; MOV the address of the ring buffer into R12
         call    #ringbuffer_dequeue
         mov.b   R12,rxmessage(R15)
-
+          
         add.w   #1,R15
         cmp.w   #10,R15  ;10th byte is more than needed 9th max
-        JEQ     deq_done
+        JGE      deq_done
       
-        JMP deq
+        JMP deqp
 
 deq_done:
-        push R9
-        mov.w  #0,R9
-        mov.w  #1,R15
+        
+        mov.b  #0,R9
+        mov.b  #1,R15  ;; re
 sum:
         add.b rxmessage(R15),R9
         add.b #1,R15
@@ -212,22 +219,20 @@ sum:
           
 checksum:
 		
-		mov.w #8,R15
-        cmp.w rxmessage(R15),R9
+	mov.w #9,R15
+        cmp.b rxmessage(R15),R9
         JEQ good_recieve
-bad_recieve:
-        mov.b #1,bad_recieve
-		pop R9
-        JMP skipdeq          
+bad_recieve_func:
+        mov.b #1,&bad_recieve
+        JMP skipdeqp          
 good_recieve:
-        mov.b #0,bad_recieve
-		pop R9
+        mov.b #0,&bad_recieve
 translate_data:
 
-		push R14
+	push R14
 		
-		mov.w #4,R15
-		mov.w #0, R14
+		mov.w #4,R15  ;;re
+		mov.w #0, R14   ;re
         mov.b rxmessage(R15),recieved_data(R14)
 		inc.w R15
 		inc.w R14
@@ -242,14 +247,13 @@ translate_data:
 		pop R14
 		
    
-skipdeq:  
-		pop R15                
+skipdeqp:  
+        pop R9
+        pop R15                
         pop R12
 
-        reti        
+        ret        
 
-
-    JMP main
         
         
         
@@ -298,10 +302,9 @@ skipdeq:
 ;-------------------------------------------------------------------------------
 TA0_ISR;    Toggle P1.0
 ;-------------------------------------------------------------------------------
-            nop
-
-
+            inc.w R7
             reti                            ;		
                                             ;    
                                         
         END
+
