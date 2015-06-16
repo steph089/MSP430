@@ -1,0 +1,417 @@
+#include "msp430.h"                     ; #define controlled include file
+
+        NAME    main                    ; module name
+        EXTERN  ringbuffer_flush        ; make the label visible outside this file
+        EXTERN  ringbuffer_isempty      ; make the label visible outside this file
+        EXTERN  ringbuffer_isfull       ; make the label visible outside this file
+        EXTERN  ringbuffer_dequeue      ; make the label visible outside this file
+        EXTERN  ringbuffer_enqueue      ; make the label visible outside this file
+
+        PUBLIC  main                    ; make the main label visible outside this module
+
+        ORG     0x200
+        tx_rb:  DS8 34  // Head, Tail, 32bytes of buffer
+        space:  DS8 14
+        rx_rb:  DS8 34  // Head, Tail, 32bytes of buffer
+        
+        txmessage: DS8 10
+        rxmessage: DS8 10 
+        recieved_data: DS8 4
+        send_data: DS8 4
+        destinationadd: DS8 1
+        arithmeticsum: DS8 1
+        msgnum: DS8 1
+        bad_recieve: DS8 1
+        my_address: DS8 1
+        b_state:    DS8 1
+        
+        
+        ORG     0FFFEh
+        DC16    init                    ; set reset vector to 'init' label
+        ORG     0FFEEh                  ; USCI RX Vector
+        DW      USCI_RX_ISR                      
+        ORG     0FFECh                  ; USCI TX Vector
+        DW      USCI_TX_ISR                                           
+        ORG     0FFF2h                  ; Timer_A0 Vector
+        DW      TA0_ISR                 ;    
+
+        RSEG    CSTACK                  ; pre-declaration of segment
+        RSEG    CODE                    ; place program in 'CODE' segment
+
+init:       
+		mov   #SFE(CSTACK), SP        ; set up stack
+        mov.b   &CALBC1_1MHZ, &BCSCTL1  ; Load calibrated DCO 1MHZ pt 1/2
+        mov.b   &CALDCO_1MHZ, &DCOCTL   ; Load calibrated DCO 1MHZ pt 2/2
+        
+StopWDT  
+		mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; Disable watchdog timer
+SetupC0     
+		mov.w   #CCIE,&CCTL0            ; 
+        mov.w   #10000,&CCR0            ;
+SetupTA     
+		mov.w   #TASSEL_2+MC_1,&TACTL   ; 
+SetupP1  
+        bis.b   #BIT3, &P1REN           ; Enable pullup resistors for button
+        bis.b   #BIT0, &P1DIR           ; Set P1.0 as output
+        bis.b   #BIT1 + BIT2, &P1SEL    ; P1.1 = RXD, P1.2=TXD
+        bis.b   #BIT1 + BIT2, &P1SEL2   ; P1.1 = RXD, P1.2=TXD
+SetupUSCI_A0
+        bis.b   #UCSSEL_2, &UCA0CTL1    ; SMCLK as input clock
+        mov.b   #104, &UCA0BR0          ; Config baud rate divider 1MHz 9600
+        mov.b   #0, &UCA0BR1            ; 1MHz 9600
+        mov.b   #UCBRS0, &UCA0MCTL      ; Modulation UCBRSx = 1
+        bic.b   #UCSWRST, &UCA0CTL1     ; **Initialize USCI state machine**
+        bis.b   #UCA0RXIE, &IE2         ; Enable USCI_A0 RX interrupt
+        mov.w   #tx_rb, R12             ; MOV the address of the ring buffer into R12
+        call    #ringbuffer_flush
+        mov.w   #rx_rb, R12             ; MOV the address of the ring buffer into R12
+        call    #ringbuffer_flush            
+        bis.w   #GIE,SR                 ; Enable global interrupts
+        
+        ;initialize variables here
+                mov.w 	#0, rxmessage
+		mov.w	#0,	arithmeticsum
+		mov.w	#0,	msgnum
+		mov.w	#0,	destinationadd
+                mov.w   #0,     R7
+		
+varinit:
+               
+		;Default Data for test
+		mov.w   #0,R15
+                mov.b   #114, rxmessage(R15)
+		mov.b	#83,  send_data(R15)
+                mov.b   #116, txmessage(R15)
+                mov.b	#35,  recieved_data(R15)
+		inc.w   R15
+                mov.b   #120, rxmessage(R15)
+		mov.b	#84,  send_data(R15)
+                mov.b   #120, txmessage(R15)
+                mov.b	#35,  recieved_data(R15)
+		inc.w   R15
+                mov.b   #109, rxmessage(R15)
+		mov.b	#69,	send_data(R15)
+                mov.b   #109, txmessage(R15)
+                mov.b	#35,  recieved_data(R15)
+		inc.w   R15
+                mov.b   #101, rxmessage(R15)
+		mov.b	#86,	send_data(R15)
+                mov.b   #101, txmessage(R15)
+                mov.b	#35,  recieved_data(R15)
+		
+		
+
+		
+		
+main:   
+      ;Check status
+      mov.w   #0,R15
+      mov.b   #114, rxmessage(R15) 
+      inc.b R15
+      mov.b   #0, rxmessage(R15) 
+      inc.b R15
+      mov.b   #0, rxmessage(R15) 
+      inc.b R15
+      mov.b   #0, rxmessage(R15) 
+      call #protocol_send
+      
+statuscheck:
+      call #protocol_recieve
+      mov.b #0,R15
+      cmp.b #114,recieved_data(R15)
+      JNE   statemachine
+      mov.b     #3,R15
+      mov.b     recieved_data(R15),R10
+      mov.b     R10,R14
+      
+statemachine
+       mov.b     &b_state, R11  ; Obtain a copy of b_state for local destructive use in determining state
+      
+
+
+switch_states:                                  ; Determine state {0,1,2,3,defaultstate}
+           sub.b      #00h, R11
+           jeq	      state0
+           sub.b      #01h, R11
+           jeq        state1	
+           sub.b      #01h, R11
+           jeq        state2
+           sub.b      #01h, R11
+           jeq	      state3
+           jmp 	      defaultstate
+          
+state0:    
+           
+     	   BIC.w     #1,R10		        ;AND on first bit
+           cmp.b     #0,R10   
+           JEQ       state1                     ; if off
+           mov.b     R14,R10
+           BIC.w     #2,R10		        ;AND on 2nd bit
+           cmp.b     #1,R10   
+           JNE       state2                       ;if on
+           mov.b     R14,R10
+           BIC.w     #4,R10		        ;AND on 3rd bit
+           cmp.b     #1,R10
+           JNE       state3                       ;if on
+           mov.b     R14,R10
+           BIC.w     #8,R10		        ;AND on 4th bit
+           cmp.b     #1,R10      	; Else if 	, proceed to next state (next time through State Machine)
+           JEQ       state4
+           mov.b     R14,R10
+           mov.w     #3,R15
+           mov.b     #0 , rxmessage(R15)
+           JMP       switchend
+          
+state1:
+           mov.w     #3,R15
+           mov.b     #1, rxmessage(R15)
+           mov.b     R14,R10
+	   BIC.w     #1,R10		        ;AND on first bit
+           cmp.b     #0,R10   
+           JEQ       switchend                  ;  		, do not leave state 
+           mov.b     #0, &b_state      	; Else if 	, proceed to next state (next time through State Machine)
+           jmp       switchend
+
+state2:
+           mov.w     #3,R15
+           mov.b     #2 , rxmessage(R15)
+           mov.b     R14,R10
+	   BIC.w     #1,R10		        ;AND on 2nd bit
+           cmp.b     #0,R10   
+           JNE       switchend                 ;  		, do not leave state 
+           mov.b     #1, &b_state      	; Else if 	, proceed to next state (next time through State Machine)
+           jmp       switchend
+          
+state3:
+           mov.w   #3,R15
+           mov.b   #4 , rxmessage(R15)
+           mov.b     R14,R10
+	   BIC.w     #1,R10		        ;AND on 2nd bit
+           cmp.b     #0,R10   
+           JNE       switchend                 ;  		, do not leave state 
+           mov.b     #1, &b_state       	; Else if	, go back to state 0
+           jmp       switchend
+state4:
+           mov.w     #3,R15
+           mov.b     #8, rxmessage(R15)
+           mov.b     R14,R10
+	   BIC.w     #1,R10		        ;AND on 2nd bit
+           cmp.b     #0,R10   
+           JNE       switchend                ;  		, do not leave state 
+           mov.b     #1, &b_state       	; Else if	, go back to state 0
+           jmp       switchend
+defaultstate:
+           mov.b     #00h, &b_state
+           
+switchend:
+        mov.b	#0,R9
+        mov.b   #67,send_data(R9) ;
+		
+	inc.b	R10
+        mov.b   #0,send_data(R9) ;1
+		
+	inc.b	R10
+	mov.b   #0,send_data(R9) ;
+		
+	call protocol_send
+        JMP main
+
+
+		
+			 
+protocol_send: 
+        XOR.B  #BIT0, &P1OUT
+        push R12
+	push R13
+	push R9
+        push R11
+        mov.w #tx_rb, R12
+        mov.w  	#0,R9
+		mov.w   #0,R11
+		
+        mov.b   #0E3h , txmessage(R11) ;0 byte
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
+		
+	mov.b   &msgnum, txmessage(R11) ;1 byte
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
+		
+	mov.b   &destinationadd, txmessage(R11) ;2 byte
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
+		
+	mov.b	#0,R10
+        mov.b   send_data(R10), txmessage(R11) ;4 byte
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
+		
+	inc.b	R10
+        mov.b   send_data(R10), txmessage(R11) ;5 byte  Correct
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
+		
+	inc.b	R10
+	mov.b   send_data(R10), txmessage(R11) ;6 byte
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
+		
+	inc.b	R10
+        mov.b   send_data(R10), txmessage(R11) ;7 byte
+	add.b   txmessage(R11),R9
+	add.b	#1, R11
+		
+		;checksum in R9
+        mov.b   R9, txmessage(R11) ;8 byte
+	add.b	#1, R11
+		
+	mov.b   #3Eh, txmessage(R11) ;9 byte
+	add.b	#1, R11
+	mov.w   #0,R11
+enq:
+        
+	add.b   txmessage(R11),R9
+		
+        mov.w   #tx_rb, R12               ; MOV the address of the ring buffer into R12
+        mov.b   txmessage(R11), R13
+        call    #ringbuffer_enqueue
+	add.b	#1, R11
+          
+        cmp.w   #10,R11   ;10th byte is more than needed 9th max
+        JEQ     enq_done
+        JMP 	enq       
+		
+enq_done:
+        pop R11
+        pop R9
+	pop R13
+	bis.b   #UCA0TXIE, &IE2         ; Enable USCI_A0 TX interrupt to begin sending data in tx_rb
+        pop R12
+        ret
+
+protocol_recieve:
+        XOR.B  #BIT0, &P1OUT
+        push    R12
+        push    R15
+        push    R9
+        mov.w   #rx_rb, R12               ; MOV the address of the ring buffer into R12
+        call    #ringbuffer_isempty
+        mov.b   #0, R15
+        cmp.b   #0x01, R12
+        JNE     deqp                     ; if the ring buffer is not empty, jump to deq and send the data
+        ;do nothing
+        jmp     skipdeqp
+          
+deqp:
+        mov.w   #rx_rb, R12               ; MOV the address of the ring buffer into R12
+        call    #ringbuffer_dequeue
+        mov.b   R12,rxmessage(R15)
+          
+        add.w   #1,R15
+        cmp.w   #10,R15  ;10th byte is more than needed 9th max
+        JGE      deq_done
+      
+        JMP deqp
+
+deq_done:
+        
+        mov.b  #0,R9
+        mov.b  #1,R15  ;; re
+sum:
+        add.b rxmessage(R15),R9
+        add.b #1,R15
+        cmp.b #8,R15
+        JEQ  checksum 
+        JMP  sum
+          
+checksum:
+		
+	mov.w #9,R15
+        cmp.b rxmessage(R15),R9
+        JEQ good_recieve
+bad_recieve_func:
+        mov.b #1,&bad_recieve
+        JMP skipdeqp          
+good_recieve:
+        mov.b #0,&bad_recieve
+translate_data:
+
+	push R14
+		
+		mov.w #4,R15  ;;re
+		mov.w #0, R14   ;re
+        mov.b rxmessage(R15),recieved_data(R14)
+		inc.w R15
+		inc.w R14
+        mov.b rxmessage(R15),recieved_data(R14)
+		inc.w R15
+		inc.w R14
+        mov.b rxmessage(R15),recieved_data(R14)
+		inc.w R15
+		inc.w R14
+        mov.b rxmessage(R15),recieved_data(R14)
+		
+		pop R14
+		
+   
+skipdeqp:  
+        pop R9
+        pop R15                
+        pop R12
+
+        ret        
+
+        
+        
+        
+        
+
+continue:
+        JMP continue                        
+                                        
+;-------------------------------------------------------------------------------
+USCI_RX_ISR;      
+;-------------------------------------------------------------------------------                                              mov.w   #tx_rb, R12               ; MOV the address of the ring buffer into R12
+        push    R12
+        push    R13
+
+        mov.b   &UCA0RXBUF, R13
+        mov.w   #rx_rb, R12  ;sets default start
+        call    #ringbuffer_enqueue
+        
+        
+        pop     R13
+        pop     R12
+        reti                                            
+          
+
+;-------------------------------------------------------------------------------
+USCI_TX_ISR;      
+;-------------------------------------------------------------------------------                                            
+          push    R12
+          
+          mov.w   #tx_rb, R12               ; MOV the address of the ring buffer into R12
+          call    #ringbuffer_isempty
+          cmp.b   #0x01, R12
+          JNE     deq                     ; if the ring buffer is not empty, jump to deq and send the data
+          bic.b   #UCA0TXIE, &IE2         ; else - disable USCI_A0 TX interrupt -> we are done sending data
+          jmp     skipdeq
+          
+deq:
+          mov.w   #tx_rb, R12               ; MOV the address of the ring buffer into R12
+          call    #ringbuffer_dequeue
+          mov.b   R12, &UCA0TXBUF
+
+skipdeq:                  
+          pop     R12
+
+          reti        
+;-------------------------------------------------------------------------------
+TA0_ISR;    Toggle P1.0
+;-------------------------------------------------------------------------------
+            inc.w R7
+            reti                            ;		
+                                            ;    
+                                        
+        END
+
