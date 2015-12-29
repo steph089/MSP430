@@ -1,0 +1,71 @@
+#include "msp430.h"                     ; #define controlled include file
+#include "lcd.h"
+
+        NAME    main                    ; module name       
+        PUBLIC  main                    ; make the main label vissible
+                                        ; outside this module
+        ORG     0FFFEh
+        DC16    init                    ; set reset vector to 'init' label
+
+        RSEG    CSTACK                  ; pre-declaration of segment
+        RSEG    CODE                    ; place program in 'CODE' segment
+
+init:   mov.w   #0280h,SP               ; set up stack
+        MOV.W   #WDTPW+WDTHOLD,&WDTCTL  ; Stop watchdog timer
+        
+        
+        CALL    #INIT_LCD               ; Inialize LCD hardware on MSP430 and LCD registers
+        
+        MOV     #0, R10                 ; init location register
+        MOV     #0, R11                 ; init number data register
+        MOV     #'a', R12                 ; init letter data register
+      ;  MOV     #0, R13
+;------------------------------------------------------------------------------------
+main:   NOP                             ; main program
+        
+         bit.b   #00001000b, &P1DIR
+         JNC      On
+         
+On:         
+         MOV     R10, R15
+         BIS     #ROW_SEL, R15           ; use row 2 (1)
+         CALL    #SET_LCD_POS        
+         
+        
+         MOV     R11, R15                ; no conversion necessary because R12 started as ASCII value
+         ADD     #0x30, R15
+         CALL    #LCD_PRINT
+        
+        
+         INC     R11
+         CMP     #10, R11
+         JLO     skipa
+         MOV     #0, R11
+skipa:
+            
+        INC     R10
+        AND     #0x00, R10              ; only using first 16 columns and first row for numbers
+        
+        MOV     #350, R15               ; wait ~200ms between characters
+        CALL    #sw_delay               ; by setting delay parameter to 100 and calling sw_delay
+        
+        JMP main                          ; jump to main
+;------------------------------------------------------------------------------------   
+
+
+sw_delay
+        PUSH    R14
+outer_delay
+        MOV     #1000, R14
+        
+inner_delay        
+          SUB     #1, R14
+          JNZ     inner_delay
+
+        SUB     #1, R15     
+        JNZ     outer_delay
+        POP     R14
+        RET
+
+
+        END
